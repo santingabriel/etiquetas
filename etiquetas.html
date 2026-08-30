@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emissor de Etiquetas PDF</title>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, sans-serif; background: #f5f5f5; color: #222;
+    max-width: 480px; margin: 0 auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  h1 { font-size: 22px; text-align: center; margin-top: 8px; }
+  label { font-size: 14px; font-weight: bold; }
+  select, input[type="date"] {
+    width: 100%; padding: 12px; font-size: 16px;
+    border: 1px solid #ccc; border-radius: 8px; background: #fff;
+  }
+  .aviso { font-size: 12px; color: #d97706; font-style: italic; text-align: center; }
+  button {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: bold;
+    border: none; border-radius: 8px; cursor: pointer;
+  }
+  #btnGerar { background: #16a34a; color: #fff; }
+  #btnGerar:active { background: #15803d; }
+  #acoes { display: flex; gap: 8px; }
+  #acoes button { flex: 1; background: #2563eb; color: #fff; font-size: 14px; }
+  #status { text-align: center; font-size: 14px; min-height: 20px; font-weight: bold; }
+  .creditos { text-align: center; font-size: 11px; color: #666; font-style: italic; margin-top: 8px; }
+  .nota { font-size: 12px; color: #555; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 8px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+  <h1>Emissor de Etiquetas</h1>
+
+  <label for="produto">Selecione o Produto:</label>
+  <select id="produto"></select>
+
+  <label for="data">Data de Empacotamento:</label>
+  <input type="date" id="data">
+
+  <p class="aviso">Lote e Data de Validade são gerados automaticamente.</p>
+
+  <button id="btnGerar">GERAR ETIQUETA</button>
+  <p id="status"></p>
+
+  <div id="acoes" class="hidden">
+    <button id="btnCompartilhar">Compartilhar</button>
+    <button id="btnBaixar">Baixar PDF</button>
+  </div>
+
+  <p class="nota">A etiqueta é gerada no celular mesmo (nada é enviado a servidor). Na primeira vez de cada produto, o app pede o PDF base uma única vez e guarda para as próximas.</p>
+
+  <button id="btnLimpar" class="hidden">Limpar etiquetas importadas</button>
+
+  <p class="creditos">Desenvolvido por Gabriel Adriano Santin</p>
+
+  <input type="file" id="inputArquivo" accept="application/pdf,.pdf" class="hidden">
+
+<script>
+"use strict";
+
+// ---------------------------------------------------------------
+// CONFIGURAÇÃO — ajuste aqui se precisar
+// ---------------------------------------------------------------
+// Posição do texto (mesmas coordenadas do app desktop, distância do TOPO)
+const POSICAO_TEXTO = { x: 70, y: 210, fontSize: 6 };
+const DIAS_VALIDADE_MILHO = 20;
+const MESES_VALIDADE_DEMAIS = 6;
+
+const PRODUTOS = [
+  "Feijão Preto", "Feijão Carioca", "Feijão Vermelho",
+  "Pipoca Vermelha", "Pipoca Branca", "Pipoca Preta",
+  "Pipoca Amarela", "Milho Verde"
+];
+
+// Para embutir as etiquetas no próprio arquivo (offline total):
+// preencha com o base64 gerado pelo script base64_etiquetas.py e deixe null caso contrário.
+const ETIQUETAS_EMBUTIDAS = {
+  "Feijão Preto": null, "Feijão Carioca": null, "Feijão Vermelho": null,
+  "Pipoca Vermelha": null, "Pipoca Branca": null, "Pipoca Preta": null,
+  "Pipoca Amarela": null, "Milho Verde": null
+};
+
+const CHAVE_LOCAL = "etiquetas_base64_v1";
+
+// ---------------------------------------------------------------
+// DOM
+// ---------------------------------------------------------------
+const selectProduto = document.getElementById("produto");
+const inputData = document.getElementById("data");
+const btnGerar = document.getElementById("btnGerar");
+const statusEl = document.getElementById("status");
+const acoesEl = document.getElementById("acoes");
+const btnCompartilhar = document.getElementById("btnCompartilhar");
+const btnBaixar = document.getElementById("btnBaixar");
+const btnLimpar = document.getElementById("btnLimpar");
+const inputArquivo = document.getElementById("inputArquivo");
+
+let ultimoArquivo = null; // { nome, bytes }
+
+// ---------------------------------------------------------------
+// Utilitários
+// ---------------------------------------------------------------
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function hojeISO() {
+  const d = new Date();
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+}
+
+function formatarDataBR(iso) {
+  const [ano, mes, dia] = iso.split("-");
+  return dia + "/" + mes + "/" + ano;
+}
+
+// Mesmo formato do lote do app desktop: L + dia + hora + minuto + segundo
+function gerarLote() {
+  const agora = new Date();
+  return "L" + pad2(agora.getDate()) + pad2(agora.getHours()) +
+         pad2(agora.getMinutes()) + pad2(agora.getSeconds());
+}
+
+// Soma meses exatos limitando o dia ao último dia do mês (igual ao calendar.monthrange do Python)
+function somarMesesExatos(ano, mes, dia, meses) {
+  const total = mes - 1 + meses;
+  const anoNovo = ano + Math.floor(total / 12);
+  const mesNovo = ((total % 12) + 12) % 12;
+  const ultimoDia = new Date(anoNovo, mesNovo + 1, 0).getDate();
+  return { ano: anoNovo, mes: mesNovo + 1, dia: Math.min(dia, ultimoDia) };
+}
+
+function calcularValidade(produto, ano, mes, dia) {
+  if (produto.includes("Milho")) {
+    const d = new Date(ano, mes - 1, dia + DIAS_VALIDADE_MILHO);
+    return { ano: d.getFullYear(), mes: d.getMonth() + 1, dia: d.getDate() };
+  }
+  return somarMesesExatos(ano, mes, dia, MESES_VALIDADE_DEMAIS);
+}
+
+function setStatus(texto, cor) {
+  statusEl.textContent = texto;
+  statusEl.style.color = cor || "#111";
+}
+
+function bytesParaBase64(bytes) {
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin);
+}
+
+function base64ParaBytes(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+// ---------------------------------------------------------------
+// Base da etiqueta (PDF template): embutida -> salva no celular -> arquivo
+// ---------------------------------------------------------------
+function etiquetaSalva(produto) {
+  try {
+    const salvas = JSON.parse(localStorage.getItem(CHAVE_LOCAL) || "{}");
+    return salvas[produto] || null;
+  } catch (e) { return null; }
+}
+
+function salvarEtiqueta(produto, b64) {
+  const salvas = JSON.parse(localStorage.getItem(CHAVE_LOCAL) || "{}");
+  salvas[produto] = b64;
+  localStorage.setItem(CHAVE_LOCAL, JSON.stringify(salvas));
+  btnLimpar.classList.remove("hidden");
+}
+
+function etiquetasImportadas() {
+  try { return Object.keys(JSON.parse(localStorage.getItem(CHAVE_LOCAL) || "{}")).length; }
+  catch (e) { return 0; }
+}
+
+function pedirArquivo(produto) {
+  return new Promise((resolve, reject) => {
+    inputArquivo.onchange = () => {
+      const arquivo = inputArquivo.files && inputArquivo.files[0];
+      inputArquivo.value = "";
+      if (!arquivo) { reject(new Error("Nenhum arquivo selecionado.")); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const bytes = new Uint8Array(reader.result);
+        salvarEtiqueta(produto, bytesParaBase64(bytes));
+        resolve(bytes);
+      };
+      reader.onerror = () => reject(new Error("Falha ao ler o arquivo."));
+      reader.readAsArrayBuffer(arquivo);
+    };
+    inputArquivo.click();
+  });
+}
+
+async function obterEtiqueta(produto) {
+  if (ETIQUETAS_EMBUTIDAS[produto]) {
+    return base64ParaBytes(ETIQUETAS_EMBUTIDAS[produto]);
+  }
+  const salva = etiquetaSalva(produto);
+  if (salva) {
+    return base64ParaBytes(salva);
+  }
+  setStatus("Selecione o PDF da etiqueta de " + produto + "…", "#b45309");
+  return pedirArquivo(produto);
+}
+
+// ---------------------------------------------------------------
+// Geração do PDF
+// ---------------------------------------------------------------
+async function gerarEtiqueta() {
+  if (typeof PDFLib === "undefined") {
+    setStatus("Erro: sem conexão para carregar a biblioteca de PDF. Conecte-se e tente de novo.", "red");
+    return;
+  }
+  const produto = selectProduto.value;
+  const dataISO = inputData.value;
+  if (!dataISO) { setStatus("Erro: informe a data de empacotamento.", "red"); return; }
+
+  const lote = gerarLote();
+  const [ano, mes, dia] = dataISO.split("-").map(Number);
+  const validade = calcularValidade(produto, ano, mes, dia);
+
+  const dataEmp = formatarDataBR(dataISO);
+  const dataVal = pad2(validade.dia) + "/" + pad2(validade.mes) + "/" + validade.ano;
+  const textoLinha = lote + "  /  " + dataEmp + "  /  " + dataVal;
+
+  setStatus("Gerando lote " + lote + "…", "#2563eb");
+  btnGerar.disabled = true;
+  try {
+    const base = await obterEtiqueta(produto);
+
+    const pdfDoc = await PDFLib.PDFDocument.load(base);
+    const pagina = pdfDoc.getPages()[0];
+    const fonte = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+
+    // O app desktop usa PyMuPDF, cuja origem é o canto SUPERIOR esquerdo.
+    // O pdf-lib usa a origem do PDF (canto INFERIOR esquerdo), então invertemos o Y.
+    const altura = pagina.getHeight();
+    pagina.drawText(textoLinha, {
+      x: POSICAO_TEXTO.x,
+      y: altura - POSICAO_TEXTO.y,
+      size: POSICAO_TEXTO.fontSize,
+      font: fonte,
+      color: PDFLib.rgb(0, 0, 0)
+    });
+
+    const bytes = await pdfDoc.save();
+    const nomeArquivo = "Etiqueta_" + produto.replace(/ /g, "_") + "_" + lote + ".pdf";
+    ultimoArquivo = { nome: nomeArquivo, bytes };
+
+    setStatus("Gerado Lote: " + lote, "green");
+    acoesEl.classList.remove("hidden");
+  } catch (erro) {
+    setStatus("Erro: " + (erro && erro.message ? erro.message : erro), "red");
+  } finally {
+    btnGerar.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------
+// Compartilhar / Baixar
+// ---------------------------------------------------------------
+function criarFile() {
+  const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
+  return new File([blob], ultimoArquivo.nome, { type: "application/pdf" });
+}
+
+async function compartilhar() {
+  if (!ultimoArquivo) return;
+  try {
+    const arquivo = criarFile();
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      await navigator.share({ files: [arquivo], title: ultimoArquivo.nome });
+    } else {
+      baixar();
+    }
+  } catch (erro) {
+    if (erro && erro.name !== "AbortError") baixar();
+  }
+}
+
+function baixar() {
+  if (!ultimoArquivo) return;
+  const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = ultimoArquivo.nome;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// ---------------------------------------------------------------
+// Inicialização
+// ---------------------------------------------------------------
+PRODUTOS.forEach((p) => {
+  const op = document.createElement("option");
+  op.value = p;
+  op.textContent = p;
+  selectProduto.appendChild(op);
+});
+inputData.value = hojeISO();
+if (etiquetasImportadas() > 0) btnLimpar.classList.remove("hidden");
+
+btnGerar.addEventListener("click", gerarEtiqueta);
+btnCompartilhar.addEventListener("click", compartilhar);
+btnBaixar.addEventListener("click", baixar);
+btnLimpar.addEventListener("click", () => {
+  localStorage.removeItem(CHAVE_LOCAL);
+  btnLimpar.classList.add("hidden");
+  setStatus("Etiquetas importadas apagadas.", "#666");
+});
+</script>
+</body>
+</html>
