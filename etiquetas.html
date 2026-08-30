@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.min.js"></script>
 <style>
   :root {
     --bg: #0e0f11;
@@ -48,7 +48,7 @@
   header { padding: 34px 0 22px; text-align: center; animation: rise .6s ease both; }
   .kicker {
     display: inline-flex; align-items: center; gap: 8px;
-    font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+    font-size: 13px; letter-spacing: .22em; text-transform: uppercase;
     color: var(--amber); font-weight: 700; margin-bottom: 12px;
   }
   .kicker::before, .kicker::after { content: ""; width: 22px; height: 1px; background: var(--amber); opacity: .6; }
@@ -157,7 +157,7 @@
 <body>
   <div class="wrap">
     <header>
-      <div class="kicker">PCP · Rastreabilidade</div>
+      <div class="kicker">G.A.S</div>
       <h1>Emissor de<br><span class="accent">Etiquetas</span></h1>
       <p class="sub">Lote e validade gerados automaticamente</p>
     </header>
@@ -193,7 +193,7 @@
 
     <p class="nota">Os PDFs devem ter o nome do produto (ex: Feijão Preto.pdf). Importe todos de uma vez — ficam salvos neste aparelho. A etiqueta é gerada no próprio celular, nada é enviado a servidor.</p>
 
-    <footer>Desenvolvido por Gabriel Adriano Santin</footer>
+    <footer>Desenvolvido por G.A.S</footer>
   </div>
 
   <input type="file" id="inputArquivo" accept="application/pdf,.pdf" class="hidden">
@@ -201,9 +201,6 @@
 <script>
 "use strict";
 
-// ---------------------------------------------------------------
-// CONFIGURAÇÃO — ajuste aqui se precisar
-// ---------------------------------------------------------------
 const POSICAO_TEXTO = { x: 70, y: 210, fontSize: 6 };
 const DIAS_VALIDADE_MILHO = 20;
 const MESES_VALIDADE_DEMAIS = 6;
@@ -214,8 +211,6 @@ const PRODUTOS = [
   "Pipoca Amarela", "Milho Verde"
 ];
 
-// Para embutir as etiquetas no próprio arquivo (offline total):
-// preencha com o base64 gerado pelo script base64_etiquetas.py e deixe null caso contrário.
 const ETIQUETAS_EMBUTIDAS = {
   "Feijão Preto": null, "Feijão Carioca": null, "Feijão Vermelho": null,
   "Pipoca Vermelha": null, "Pipoca Branca": null, "Pipoca Preta": null,
@@ -224,9 +219,6 @@ const ETIQUETAS_EMBUTIDAS = {
 
 const CHAVE_LOCAL = "etiquetas_base64_v1";
 
-// ---------------------------------------------------------------
-// DOM
-// ---------------------------------------------------------------
 const selectProduto = document.getElementById("produto");
 const inputData = document.getElementById("data");
 const btnGerar = document.getElementById("btnGerar");
@@ -241,9 +233,6 @@ const inputArquivo = document.getElementById("inputArquivo");
 
 let ultimoArquivo = null;
 
-// ---------------------------------------------------------------
-// Utilitários
-// ---------------------------------------------------------------
 function pad2(n) { return String(n).padStart(2, "0"); }
 function hojeISO() {
   const d = new Date();
@@ -277,12 +266,9 @@ function setStatus(texto, cor) {
   statusEl.style.color = cor || "#f2f3f5";
   statusEl.classList.add("show");
 }
-
-// Esconde os botões de ação (Imprimir/Compartilhar/Baixar)
 function ocultarAcoes() {
   acoesEl.classList.remove("show");
 }
-
 function bytesParaBase64(bytes) {
   let bin = "";
   const chunk = 0x8000;
@@ -298,9 +284,6 @@ function base64ParaBytes(b64) {
   return bytes;
 }
 
-// ---------------------------------------------------------------
-// Base da etiqueta (PDF template)
-// ---------------------------------------------------------------
 function etiquetaSalva(produto) {
   try {
     const salvas = JSON.parse(localStorage.getItem(CHAVE_LOCAL) || "{}");
@@ -392,9 +375,6 @@ async function obterEtiqueta(produto) {
   return pedirArquivo(produto);
 }
 
-// ---------------------------------------------------------------
-// Geração do PDF
-// ---------------------------------------------------------------
 async function gerarEtiqueta() {
   if (typeof PDFLib === "undefined") {
     setStatus("Erro: sem conexão para carregar a biblioteca de PDF. Conecte-se e tente de novo.", "#ff5c5c");
@@ -439,9 +419,6 @@ async function gerarEtiqueta() {
   }
 }
 
-// ---------------------------------------------------------------
-// Imprimir / Compartilhar / Baixar
-// ---------------------------------------------------------------
 function criarBlobUrl() {
   const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
   return URL.createObjectURL(blob);
@@ -489,9 +466,6 @@ function baixar() {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-// ---------------------------------------------------------------
-// Inicialização
-// ---------------------------------------------------------------
 PRODUTOS.forEach((p) => {
   const op = document.createElement("option");
   op.value = p;
@@ -513,8 +487,6 @@ btnLimpar.addEventListener("click", () => {
   setStatus("Etiquetas importadas apagadas.", "#9aa1ab");
 });
 
-// Proteção: se mudar produto ou data, esconde os botões de ação
-// e força a regeneração antes de imprimir.
 selectProduto.addEventListener("change", ocultarAcoes);
 inputData.addEventListener("change", ocultarAcoes);
 </script>
