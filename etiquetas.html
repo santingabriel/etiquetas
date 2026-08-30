@@ -2,72 +2,199 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Emissor de Etiquetas PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0e0f11;
+    --bg-2: #17191d;
+    --panel: #1d2025;
+    --panel-2: #262a31;
+    --line: #33383f;
+    --text: #f2f3f5;
+    --muted: #9aa1ab;
+    --amber: #ffb020;
+    --amber-deep: #e8960a;
+    --green: #2ecc71;
+    --red: #ff5c5c;
+    --blue: #4d9fff;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html { -webkit-text-size-adjust: 100%; }
   body {
-    font-family: Arial, sans-serif; background: #f5f5f5; color: #222;
-    max-width: 480px; margin: 0 auto; padding: 16px;
-    display: flex; flex-direction: column; gap: 12px;
+    font-family: "Space Grotesk", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 0 16px calc(24px + env(safe-area-inset-bottom));
+    position: relative;
+    overflow-x: hidden;
   }
-  h1 { font-size: 22px; text-align: center; margin-top: 8px; }
-  label { font-size: 14px; font-weight: bold; }
+  body::before {
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 34px 34px;
+  }
+  .wrap { position: relative; z-index: 1; width: 100%; max-width: 460px; }
+
+  header { padding: 34px 0 22px; text-align: center; animation: rise .6s ease both; }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--amber); font-weight: 700; margin-bottom: 12px;
+  }
+  .kicker::before, .kicker::after { content: ""; width: 22px; height: 1px; background: var(--amber); opacity: .6; }
+  h1 {
+    font-family: "Archivo Black", sans-serif;
+    font-size: clamp(26px, 8vw, 34px); line-height: 1.05;
+    text-transform: uppercase; letter-spacing: .01em;
+  }
+  h1 .accent { color: var(--amber); }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 8px; letter-spacing: .02em; }
+
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--bg-2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px; box-shadow: 0 18px 40px rgba(0,0,0,.45);
+    animation: rise .6s .08s ease both;
+  }
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  label {
+    display: block; font-size: 12px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px;
+  }
   select, input[type="date"] {
-    width: 100%; padding: 12px; font-size: 16px;
-    border: 1px solid #ccc; border-radius: 8px; background: #fff;
+    width: 100%; padding: 14px; font-size: 16px; font-family: inherit;
+    color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    appearance: none; -webkit-appearance: none;
   }
-  .aviso { font-size: 12px; color: #d97706; font-style: italic; text-align: center; }
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23ffb020' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 40px;
+  }
+  select:focus, input[type="date"]:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(255,176,32,.18); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.8) sepia(1) saturate(3) hue-rotate(360deg); cursor: pointer; }
+
+  .aviso {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--amber); background: rgba(255,176,32,.08);
+    border: 1px dashed rgba(255,176,32,.35); border-radius: 10px;
+    padding: 10px 12px; margin: 4px 0 16px; line-height: 1.4;
+  }
+
   button {
-    width: 100%; padding: 14px; font-size: 16px; font-weight: bold;
-    border: none; border-radius: 8px; cursor: pointer;
+    width: 100%; padding: 15px; font-size: 15px; font-weight: 700; font-family: inherit;
+    border: none; border-radius: 12px; cursor: pointer;
+    transition: transform .08s, box-shadow .2s, background .2s, opacity .2s;
   }
-  #btnGerar { background: #16a34a; color: #fff; }
-  #btnGerar:active { background: #15803d; }
-  #btnImportarLote {
-    background: #eef2ff; color: #1d4ed8; border: 1px solid #c7d2fe; font-size: 14px;
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .btn-import {
+    background: transparent; color: var(--blue);
+    border: 1px dashed rgba(77,159,255,.5); font-size: 13px; font-weight: 500;
+    padding: 12px; margin-bottom: 12px;
   }
-  #acoes { display: flex; flex-direction: column; gap: 8px; }
-  #btnImprimir { background: #2563eb; color: #fff; }
-  #btnImprimir:active { background: #1d4ed8; }
-  #acoesLinha2 { display: flex; gap: 8px; }
-  #acoesLinha2 button { flex: 1; background: #6b7280; color: #fff; font-size: 14px; }
-  #status { text-align: center; font-size: 14px; min-height: 20px; font-weight: bold; }
-  .creditos { text-align: center; font-size: 11px; color: #666; font-style: italic; margin-top: 8px; }
-  .nota { font-size: 12px; color: #555; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 8px; }
-  .hidden { display: none; }
+  .btn-import:hover { background: rgba(77,159,255,.08); }
+
+  .btn-gerar {
+    background: linear-gradient(180deg, var(--amber), var(--amber-deep));
+    color: #14140f; font-family: "Archivo Black", sans-serif;
+    text-transform: uppercase; letter-spacing: .04em; font-size: 16px;
+    box-shadow: 0 10px 24px rgba(255,176,32,.28);
+  }
+  .btn-gerar:hover { box-shadow: 0 12px 30px rgba(255,176,32,.4); }
+
+  #status {
+    min-height: 24px; text-align: center; font-size: 14px; font-weight: 700;
+    margin-top: 16px; opacity: 0; transform: translateY(4px);
+    transition: opacity .3s, transform .3s; letter-spacing: .01em;
+  }
+  #status.show { opacity: 1; transform: translateY(0); }
+
+  #acoes { display: none; flex-direction: column; gap: 10px; margin-top: 16px; }
+  #acoes.show { display: flex; animation: rise .4s ease both; }
+  .btn-print {
+    background: linear-gradient(180deg, var(--blue), #2f7fe0);
+    color: #fff; font-family: "Archivo Black", sans-serif; text-transform: uppercase; font-size: 15px;
+    box-shadow: 0 10px 24px rgba(77,159,255,.25);
+  }
+  .acoes-row { display: flex; gap: 10px; }
+  .acoes-row button { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); font-size: 13px; font-weight: 500; }
+  .acoes-row button:hover { border-color: var(--muted); }
+
+  .btn-limpar {
+    background: transparent; color: var(--muted); font-size: 12px; font-weight: 500;
+    margin-top: 14px; border: 1px solid var(--line); padding: 11px;
+  }
+  .btn-limpar:hover { color: var(--red); border-color: var(--red); }
+
+  footer { margin-top: 26px; text-align: center; color: var(--muted); font-size: 11px; font-style: italic; letter-spacing: .02em; animation: rise .6s .16s ease both; }
+  .nota {
+    font-size: 11px; color: var(--muted); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+    margin-top: 18px; line-height: 1.5; animation: rise .6s .12s ease both;
+  }
+
+  .hidden { display: none !important; }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
-  <h1>Emissor de Etiquetas</h1>
+  <div class="wrap">
+    <header>
+      <div class="kicker">PCP · Rastreabilidade</div>
+      <h1>Emissor de<br><span class="accent">Etiquetas</span></h1>
+      <p class="sub">Lote e validade gerados automaticamente</p>
+    </header>
 
-  <label for="produto">Selecione o Produto:</label>
-  <select id="produto"></select>
+    <div class="card">
+      <div class="field">
+        <label for="produto">Produto</label>
+        <select id="produto"></select>
+      </div>
 
-  <label for="data">Data de Empacotamento:</label>
-  <input type="date" id="data">
+      <div class="field">
+        <label for="data">Data de empacotamento</label>
+        <input type="date" id="data">
+      </div>
 
-  <p class="aviso">Lote e Data de Validade são gerados automaticamente.</p>
+      <p class="aviso">⚠️ Lote e data de validade são calculados sozinhos.</p>
 
-  <button id="btnImportarLote">📂 Importar etiquetas em lote (todos os PDFs de uma vez)</button>
+      <button class="btn-import" id="btnImportarLote">📂 Importar etiquetas em lote</button>
+      <button class="btn-gerar" id="btnGerar">Gerar Etiqueta</button>
 
-  <button id="btnGerar">GERAR ETIQUETA</button>
-  <p id="status"></p>
+      <p id="status"></p>
 
-  <div id="acoes" class="hidden">
-    <button id="btnImprimir">🖨️ Imprimir Etiqueta</button>
-    <div id="acoesLinha2">
-      <button id="btnCompartilhar">Compartilhar</button>
-      <button id="btnBaixar">Baixar PDF</button>
+      <div id="acoes">
+        <button class="btn-print" id="btnImprimir">🖨️ Imprimir Etiqueta</button>
+        <div class="acoes-row">
+          <button id="btnCompartilhar">Compartilhar</button>
+          <button id="btnBaixar">Baixar PDF</button>
+        </div>
+      </div>
+
+      <button class="btn-limpar hidden" id="btnLimpar">Limpar etiquetas importadas</button>
     </div>
+
+    <p class="nota">Os PDFs devem ter o nome do produto (ex: Feijão Preto.pdf). Importe todos de uma vez — ficam salvos neste aparelho. A etiqueta é gerada no próprio celular, nada é enviado a servidor.</p>
+
+    <footer>Desenvolvido por Gabriel Adriano Santin</footer>
   </div>
-
-  <p class="nota">Os PDFs devem ter o nome do produto (ex: Feijão Preto.pdf). Na primeira vez, importe todos de uma vez pelo botão acima — ficam salvos neste aparelho. A etiqueta é gerada no celular mesmo (nada é enviado a servidor).</p>
-
-  <button id="btnLimpar" class="hidden">Limpar etiquetas importadas</button>
-
-  <p class="creditos">Desenvolvido por Gabriel Adriano Santin</p>
 
   <input type="file" id="inputArquivo" accept="application/pdf,.pdf" class="hidden">
 
@@ -77,7 +204,6 @@
 // ---------------------------------------------------------------
 // CONFIGURAÇÃO — ajuste aqui se precisar
 // ---------------------------------------------------------------
-// Posição do texto (mesmas coordenadas do app desktop, distância do TOPO)
 const POSICAO_TEXTO = { x: 70, y: 210, fontSize: 6 };
 const DIAS_VALIDADE_MILHO = 20;
 const MESES_VALIDADE_DEMAIS = 6;
@@ -113,31 +239,25 @@ const btnBaixar = document.getElementById("btnBaixar");
 const btnLimpar = document.getElementById("btnLimpar");
 const inputArquivo = document.getElementById("inputArquivo");
 
-let ultimoArquivo = null; // { nome, bytes }
+let ultimoArquivo = null;
 
 // ---------------------------------------------------------------
 // Utilitários
 // ---------------------------------------------------------------
 function pad2(n) { return String(n).padStart(2, "0"); }
-
 function hojeISO() {
   const d = new Date();
   return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
 }
-
 function formatarDataBR(iso) {
   const [ano, mes, dia] = iso.split("-");
   return dia + "/" + mes + "/" + ano;
 }
-
-// Mesmo formato do lote do app desktop: L + dia + hora + minuto + segundo
 function gerarLote() {
   const agora = new Date();
   return "L" + pad2(agora.getDate()) + pad2(agora.getHours()) +
          pad2(agora.getMinutes()) + pad2(agora.getSeconds());
 }
-
-// Soma meses exatos limitando o dia ao último dia do mês (igual ao calendar.monthrange do Python)
 function somarMesesExatos(ano, mes, dia, meses) {
   const total = mes - 1 + meses;
   const anoNovo = ano + Math.floor(total / 12);
@@ -145,7 +265,6 @@ function somarMesesExatos(ano, mes, dia, meses) {
   const ultimoDia = new Date(anoNovo, mesNovo + 1, 0).getDate();
   return { ano: anoNovo, mes: mesNovo + 1, dia: Math.min(dia, ultimoDia) };
 }
-
 function calcularValidade(produto, ano, mes, dia) {
   if (produto.includes("Milho")) {
     const d = new Date(ano, mes - 1, dia + DIAS_VALIDADE_MILHO);
@@ -153,10 +272,15 @@ function calcularValidade(produto, ano, mes, dia) {
   }
   return somarMesesExatos(ano, mes, dia, MESES_VALIDADE_DEMAIS);
 }
-
 function setStatus(texto, cor) {
   statusEl.textContent = texto;
-  statusEl.style.color = cor || "#111";
+  statusEl.style.color = cor || "#f2f3f5";
+  statusEl.classList.add("show");
+}
+
+// Esconde os botões de ação (Imprimir/Compartilhar/Baixar)
+function ocultarAcoes() {
+  acoesEl.classList.remove("show");
 }
 
 function bytesParaBase64(bytes) {
@@ -167,7 +291,6 @@ function bytesParaBase64(bytes) {
   }
   return btoa(bin);
 }
-
 function base64ParaBytes(b64) {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -176,7 +299,7 @@ function base64ParaBytes(b64) {
 }
 
 // ---------------------------------------------------------------
-// Base da etiqueta (PDF template): embutida -> salva no celular -> arquivo
+// Base da etiqueta (PDF template)
 // ---------------------------------------------------------------
 function etiquetaSalva(produto) {
   try {
@@ -184,19 +307,16 @@ function etiquetaSalva(produto) {
     return salvas[produto] || null;
   } catch (e) { return null; }
 }
-
 function salvarEtiqueta(produto, b64) {
   const salvas = JSON.parse(localStorage.getItem(CHAVE_LOCAL) || "{}");
   salvas[produto] = b64;
   localStorage.setItem(CHAVE_LOCAL, JSON.stringify(salvas));
   btnLimpar.classList.remove("hidden");
 }
-
 function etiquetasImportadas() {
   try { return Object.keys(JSON.parse(localStorage.getItem(CHAVE_LOCAL) || "{}")).length; }
   catch (e) { return 0; }
 }
-
 function produtoPeloNome(nomeArquivo) {
   const nomeBase = nomeArquivo.replace(/\.pdf$/i, "").trim().toLowerCase();
   return PRODUTOS.find((p) => {
@@ -204,7 +324,6 @@ function produtoPeloNome(nomeArquivo) {
     return nomeBase === pm || nomeBase.startsWith(pm + " ") || nomeBase.startsWith(pm + ".");
   }) || null;
 }
-
 function pedirArquivo(produto) {
   return new Promise((resolve, reject) => {
     inputArquivo.multiple = false;
@@ -224,18 +343,14 @@ function pedirArquivo(produto) {
     inputArquivo.click();
   });
 }
-
-// Importa vários PDFs de uma vez, associando pelo nome do arquivo
 function importarLote() {
   inputArquivo.multiple = true;
   inputArquivo.onchange = () => {
     const arquivos = Array.from(inputArquivo.files || []);
     inputArquivo.value = "";
     if (arquivos.length === 0) return;
-
     const importadas = [];
     const naoReconhecidos = [];
-
     const leituras = arquivos.map((arquivo) => {
       const produto = produtoPeloNome(arquivo.name);
       return new Promise((resolve) => {
@@ -253,20 +368,18 @@ function importarLote() {
         reader.readAsArrayBuffer(arquivo);
       });
     });
-
     Promise.all(leituras).then(() => {
       let msg = "✅ Etiquetas importadas: " + (importadas.join(", ") || "nenhuma");
       if (naoReconhecidos.length > 0) {
         msg += ". Ignorados (nome diferente do produto): " + naoReconhecidos.join(", ") +
                ". Renomeie para o nome do produto, ex: Feijão Preto.pdf";
       }
-      setStatus(msg, importadas.length > 0 ? "green" : "red");
+      setStatus(msg, importadas.length > 0 ? "#2ecc71" : "#ff5c5c");
       btnLimpar.classList.remove("hidden");
     });
   };
   inputArquivo.click();
 }
-
 async function obterEtiqueta(produto) {
   if (ETIQUETAS_EMBUTIDAS[produto]) {
     return base64ParaBytes(ETIQUETAS_EMBUTIDAS[produto]);
@@ -275,7 +388,7 @@ async function obterEtiqueta(produto) {
   if (salva) {
     return base64ParaBytes(salva);
   }
-  setStatus("Selecione o PDF da etiqueta de " + produto + "…", "#b45309");
+  setStatus("Selecione o PDF da etiqueta de " + produto + "…", "#ffb020");
   return pedirArquivo(produto);
 }
 
@@ -284,12 +397,12 @@ async function obterEtiqueta(produto) {
 // ---------------------------------------------------------------
 async function gerarEtiqueta() {
   if (typeof PDFLib === "undefined") {
-    setStatus("Erro: sem conexão para carregar a biblioteca de PDF. Conecte-se e tente de novo.", "red");
+    setStatus("Erro: sem conexão para carregar a biblioteca de PDF. Conecte-se e tente de novo.", "#ff5c5c");
     return;
   }
   const produto = selectProduto.value;
   const dataISO = inputData.value;
-  if (!dataISO) { setStatus("Erro: informe a data de empacotamento.", "red"); return; }
+  if (!dataISO) { setStatus("Erro: informe a data de empacotamento.", "#ff5c5c"); return; }
 
   const lote = gerarLote();
   const [ano, mes, dia] = dataISO.split("-").map(Number);
@@ -299,17 +412,13 @@ async function gerarEtiqueta() {
   const dataVal = pad2(validade.dia) + "/" + pad2(validade.mes) + "/" + validade.ano;
   const textoLinha = lote + "  /  " + dataEmp + "  /  " + dataVal;
 
-  setStatus("Gerando lote " + lote + "…", "#2563eb");
+  setStatus("Gerando lote " + lote + "…", "#4d9fff");
   btnGerar.disabled = true;
   try {
     const base = await obterEtiqueta(produto);
-
     const pdfDoc = await PDFLib.PDFDocument.load(base);
     const pagina = pdfDoc.getPages()[0];
     const fonte = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-
-    // O app desktop usa PyMuPDF, cuja origem é o canto SUPERIOR esquerdo.
-    // O pdf-lib usa a origem do PDF (canto INFERIOR esquerdo), então invertemos o Y.
     const altura = pagina.getHeight();
     pagina.drawText(textoLinha, {
       x: POSICAO_TEXTO.x,
@@ -318,15 +427,13 @@ async function gerarEtiqueta() {
       font: fonte,
       color: PDFLib.rgb(0, 0, 0)
     });
-
     const bytes = await pdfDoc.save();
     const nomeArquivo = "Etiqueta_" + produto.replace(/ /g, "_") + "_" + lote + ".pdf";
     ultimoArquivo = { nome: nomeArquivo, bytes };
-
-    setStatus("Gerado Lote: " + lote, "green");
-    acoesEl.classList.remove("hidden");
+    setStatus("✅ Gerado Lote: " + lote, "#2ecc71");
+    acoesEl.classList.add("show");
   } catch (erro) {
-    setStatus("Erro: " + (erro && erro.message ? erro.message : erro), "red");
+    setStatus("Erro: " + (erro && erro.message ? erro.message : erro), "#ff5c5c");
   } finally {
     btnGerar.disabled = false;
   }
@@ -339,27 +446,23 @@ function criarBlobUrl() {
   const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
   return URL.createObjectURL(blob);
 }
-
 function imprimir() {
   if (!ultimoArquivo) return;
   const url = criarBlobUrl();
   const janela = window.open(url, "_blank");
   if (janela) {
-    // No computador, dispara a impressão automaticamente
     setTimeout(() => {
-      try { janela.print(); } catch (e) { /* celular: usar o botão de imprimir do visualizador */ }
+      try { janela.print(); } catch (e) { /* celular: usar botão do visualizador */ }
     }, 1000);
   } else {
-    setStatus("Navegador bloqueou a janela. Permita pop-ups ou use Baixar PDF.", "red");
+    setStatus("Navegador bloqueou a janela. Permita pop-ups ou use Baixar PDF.", "#ff5c5c");
   }
   setTimeout(() => URL.revokeObjectURL(url), 120000);
 }
-
 function criarFile() {
   const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
   return new File([blob], ultimoArquivo.nome, { type: "application/pdf" });
 }
-
 async function compartilhar() {
   if (!ultimoArquivo) return;
   try {
@@ -373,7 +476,6 @@ async function compartilhar() {
     if (erro && erro.name !== "AbortError") baixar();
   }
 }
-
 function baixar() {
   if (!ultimoArquivo) return;
   const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
@@ -407,8 +509,14 @@ btnBaixar.addEventListener("click", baixar);
 btnLimpar.addEventListener("click", () => {
   localStorage.removeItem(CHAVE_LOCAL);
   btnLimpar.classList.add("hidden");
-  setStatus("Etiquetas importadas apagadas.", "#666");
+  ocultarAcoes();
+  setStatus("Etiquetas importadas apagadas.", "#9aa1ab");
 });
+
+// Proteção: se mudar produto ou data, esconde os botões de ação
+// e força a regeneração antes de imprimir.
+selectProduto.addEventListener("change", ocultarAcoes);
+inputData.addEventListener("change", ocultarAcoes);
 </script>
 </body>
 </html>
