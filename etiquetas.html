@@ -25,8 +25,14 @@
   }
   #btnGerar { background: #16a34a; color: #fff; }
   #btnGerar:active { background: #15803d; }
-  #acoes { display: flex; gap: 8px; }
-  #acoes button { flex: 1; background: #2563eb; color: #fff; font-size: 14px; }
+  #btnImportarLote {
+    background: #eef2ff; color: #1d4ed8; border: 1px solid #c7d2fe; font-size: 14px;
+  }
+  #acoes { display: flex; flex-direction: column; gap: 8px; }
+  #btnImprimir { background: #2563eb; color: #fff; }
+  #btnImprimir:active { background: #1d4ed8; }
+  #acoesLinha2 { display: flex; gap: 8px; }
+  #acoesLinha2 button { flex: 1; background: #6b7280; color: #fff; font-size: 14px; }
   #status { text-align: center; font-size: 14px; min-height: 20px; font-weight: bold; }
   .creditos { text-align: center; font-size: 11px; color: #666; font-style: italic; margin-top: 8px; }
   .nota { font-size: 12px; color: #555; background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 8px; }
@@ -44,15 +50,20 @@
 
   <p class="aviso">Lote e Data de Validade são gerados automaticamente.</p>
 
+  <button id="btnImportarLote">📂 Importar etiquetas em lote (todos os PDFs de uma vez)</button>
+
   <button id="btnGerar">GERAR ETIQUETA</button>
   <p id="status"></p>
 
   <div id="acoes" class="hidden">
-    <button id="btnCompartilhar">Compartilhar</button>
-    <button id="btnBaixar">Baixar PDF</button>
+    <button id="btnImprimir">🖨️ Imprimir Etiqueta</button>
+    <div id="acoesLinha2">
+      <button id="btnCompartilhar">Compartilhar</button>
+      <button id="btnBaixar">Baixar PDF</button>
+    </div>
   </div>
 
-  <p class="nota">A etiqueta é gerada no celular mesmo (nada é enviado a servidor). Na primeira vez de cada produto, o app pede o PDF base uma única vez e guarda para as próximas.</p>
+  <p class="nota">Os PDFs devem ter o nome do produto (ex: Feijão Preto.pdf). Na primeira vez, importe todos de uma vez pelo botão acima — ficam salvos neste aparelho. A etiqueta é gerada no celular mesmo (nada é enviado a servidor).</p>
 
   <button id="btnLimpar" class="hidden">Limpar etiquetas importadas</button>
 
@@ -93,8 +104,10 @@ const CHAVE_LOCAL = "etiquetas_base64_v1";
 const selectProduto = document.getElementById("produto");
 const inputData = document.getElementById("data");
 const btnGerar = document.getElementById("btnGerar");
+const btnImportarLote = document.getElementById("btnImportarLote");
 const statusEl = document.getElementById("status");
 const acoesEl = document.getElementById("acoes");
+const btnImprimir = document.getElementById("btnImprimir");
 const btnCompartilhar = document.getElementById("btnCompartilhar");
 const btnBaixar = document.getElementById("btnBaixar");
 const btnLimpar = document.getElementById("btnLimpar");
@@ -184,8 +197,17 @@ function etiquetasImportadas() {
   catch (e) { return 0; }
 }
 
+function produtoPeloNome(nomeArquivo) {
+  const nomeBase = nomeArquivo.replace(/\.pdf$/i, "").trim().toLowerCase();
+  return PRODUTOS.find((p) => {
+    const pm = p.toLowerCase();
+    return nomeBase === pm || nomeBase.startsWith(pm + " ") || nomeBase.startsWith(pm + ".");
+  }) || null;
+}
+
 function pedirArquivo(produto) {
   return new Promise((resolve, reject) => {
+    inputArquivo.multiple = false;
     inputArquivo.onchange = () => {
       const arquivo = inputArquivo.files && inputArquivo.files[0];
       inputArquivo.value = "";
@@ -201,6 +223,48 @@ function pedirArquivo(produto) {
     };
     inputArquivo.click();
   });
+}
+
+// Importa vários PDFs de uma vez, associando pelo nome do arquivo
+function importarLote() {
+  inputArquivo.multiple = true;
+  inputArquivo.onchange = () => {
+    const arquivos = Array.from(inputArquivo.files || []);
+    inputArquivo.value = "";
+    if (arquivos.length === 0) return;
+
+    const importadas = [];
+    const naoReconhecidos = [];
+
+    const leituras = arquivos.map((arquivo) => {
+      const produto = produtoPeloNome(arquivo.name);
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (produto) {
+            salvarEtiqueta(produto, bytesParaBase64(new Uint8Array(reader.result)));
+            importadas.push(produto);
+          } else {
+            naoReconhecidos.push(arquivo.name);
+          }
+          resolve();
+        };
+        reader.onerror = () => resolve();
+        reader.readAsArrayBuffer(arquivo);
+      });
+    });
+
+    Promise.all(leituras).then(() => {
+      let msg = "✅ Etiquetas importadas: " + (importadas.join(", ") || "nenhuma");
+      if (naoReconhecidos.length > 0) {
+        msg += ". Ignorados (nome diferente do produto): " + naoReconhecidos.join(", ") +
+               ". Renomeie para o nome do produto, ex: Feijão Preto.pdf";
+      }
+      setStatus(msg, importadas.length > 0 ? "green" : "red");
+      btnLimpar.classList.remove("hidden");
+    });
+  };
+  inputArquivo.click();
 }
 
 async function obterEtiqueta(produto) {
@@ -269,8 +333,28 @@ async function gerarEtiqueta() {
 }
 
 // ---------------------------------------------------------------
-// Compartilhar / Baixar
+// Imprimir / Compartilhar / Baixar
 // ---------------------------------------------------------------
+function criarBlobUrl() {
+  const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
+  return URL.createObjectURL(blob);
+}
+
+function imprimir() {
+  if (!ultimoArquivo) return;
+  const url = criarBlobUrl();
+  const janela = window.open(url, "_blank");
+  if (janela) {
+    // No computador, dispara a impressão automaticamente
+    setTimeout(() => {
+      try { janela.print(); } catch (e) { /* celular: usar o botão de imprimir do visualizador */ }
+    }, 1000);
+  } else {
+    setStatus("Navegador bloqueou a janela. Permita pop-ups ou use Baixar PDF.", "red");
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+}
+
 function criarFile() {
   const blob = new Blob([ultimoArquivo.bytes], { type: "application/pdf" });
   return new File([blob], ultimoArquivo.nome, { type: "application/pdf" });
@@ -316,6 +400,8 @@ inputData.value = hojeISO();
 if (etiquetasImportadas() > 0) btnLimpar.classList.remove("hidden");
 
 btnGerar.addEventListener("click", gerarEtiqueta);
+btnImportarLote.addEventListener("click", importarLote);
+btnImprimir.addEventListener("click", imprimir);
 btnCompartilhar.addEventListener("click", compartilhar);
 btnBaixar.addEventListener("click", baixar);
 btnLimpar.addEventListener("click", () => {
